@@ -1,6 +1,6 @@
 # 摄像头测距
 
-[English](README_en.md) | 中文
+[English](README.md) | 中文
 
 本项目是一个基于Quectel pi H1单板电脑实现的双目摄像头测距应用，点击相机预览画面中的物体可以计算摄像头与物体在真实世界中的距离。
 

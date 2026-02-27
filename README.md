@@ -1,7 +1,7 @@
 
 # Camera Distance Measurement
 
-English| [中文](README.md)
+English| [中文](README_zh.md)
 
 This project is a stereo camera distance measurement application implemented on Quectel Pi H1 single-board computer. Click on objects in the camera preview to calculate the real-world distance between the camera and the objects.
 
