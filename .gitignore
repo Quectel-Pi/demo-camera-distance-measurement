@@ -1,2 +1,4 @@
 __pycache__/
 tmp_img/
+src/__pycache__
+src/tmp_img

@@ -2,14 +2,14 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_ROOT)
 
 from PySide6.QtWidgets import QApplication
 from ui_manager import UIManager
 
 
 def main():
-    """Ö÷º¯Êý"""
     print("Starting QuecPi Stereo Camera Application (Python)...")
     
     app = QApplication(sys.argv)

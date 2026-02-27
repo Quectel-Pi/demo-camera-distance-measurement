@@ -232,7 +232,7 @@ class UIManager(QWidget):
         LogManager.append_log("Starting Camera Distance Mesurement Application", "INFO")
 
         # 加载标定参数
-        npz_path = os.path.join(os.path.dirname(__file__), "stereo_calib_params.npz")
+        npz_path = os.path.join(os.path.dirname(__file__), "..", "tools", "stereo_calib_params.npz")
         if self._ranging_calculator.load_calibration(npz_path):
             calib_log = f"Calibration loaded successfully! - Baseline: {self._ranging_calculator._baseline:.6f}m - Image size: {self._ranging_calculator._img_size[0]}x{self._ranging_calculator._img_size[1]}"
             LogManager.append_log(calib_log, "INFO")

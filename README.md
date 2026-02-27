@@ -1,49 +1,43 @@
-# 摄像头测距
 
-## 一、项目功能
+# Camera Distance Measurement
 
-本项目是一个基于Quectel pi H1单板电脑实现的摄像头测距应用，提供以下功能：
+English| [中文](README.md)
 
-### 1. 双目摄像头预览（辅助功能，用于观察左右目摄像头的预览是否正常）
-- 支持左/右摄像头单独预览
-- 实时显示摄像头画面
-- 自动检测并适配双目摄像头
+This project is a stereo camera distance measurement application implemented on Quectel Pi H1 single-board computer. Click on objects in the camera preview to calculate the real-world distance between the camera and the objects.
 
-### 2. 双目拍照（辅助功能，同时使用左右目摄像头拍照观察是否有偏移）
-- 同时捕获左右摄像头的图像
-- 自动分割左右画面
-- 保存到指定路径
+![Distance Measurement Result Display](assets/test1.png)
 
-### 3. 双目测距（主要功能，用左目摄像头当预览画面，屏幕点击进行测距）
-- 基于视差原理计算目标距离
-- 点击画面任意位置即可测距
-- 使用SGBM立体匹配算法
-- 支持标定参数优化测量精度
-
-### 4. 摄像头参数设置（辅助功能，用于调节摄像头参数）
-- 亮度、对比度、饱和度调节
-- 曝光时间/自动曝光
-- 白平衡/自动白平衡
-- 伽马、锐度、背光补偿
+## Features
+- Distance calculation based on stereo matching principle
+   - Click anywhere on the screen to measure distance
+   - Uses SGBM stereo matching algorithm
+   - Supports calibration parameter optimization for improved accuracy
+- Individual left/right camera preview support
+- Simultaneous capture of left and right camera images for comparison
+- Camera parameter adjustment support for optimized matching results
+   - Brightness, contrast, saturation adjustment
+   - Exposure time/auto exposure
+   - White balance/auto white balance
+   - Gamma, sharpness, backlight compensation
 
 ---
 
-## 二、环境配置
+## Environment Setup
 
-### 2.1 系统要求
-- **操作系统**: Linux（使用V4L2接口）
-- **Python版本**: 3.8+
-- **OpenCV版本**: 4.8+
-- **PySide6版本**: 6.5+
-- **numpy版本**: 1.24+
+### System Requirements
+- **Operating System**: Linux (using V4L2 interface)
+- **Python Version**: 3.8+
+- **OpenCV Version**: 4.8+
+- **PySide6 Version**: 6.5+
+- **NumPy Version**: 1.24+
 
-### 2.2 依赖安装
+### Dependency Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-或手动安装：
+Or install manually:
 
 ```bash
 pip install PySide6>=6.5.0
@@ -51,103 +45,204 @@ pip install opencv-python>=4.8.0
 pip install numpy>=1.24.0
 ```
 
-### 2.3 系统依赖（Linux）
+### System Dependencies (Linux)
 ```bash
-# V4L2工具（用于摄像头参数读取）
+# V4L2 tools (for camera parameter reading)
 sudo apt-get install v4l-utils
 ```
 
 ---
 
-## 三、项目代码结构简介
+## Project Code Structure
 
 ```
-PyCameraDemo/
-├── main.py                 # 主入口，启动GUI应用
-├── camera_manager.py       # 摄像头管理类，负责视频采集、预览、拍照
-├── camera_calibration.py   # 双目标定模块，采集标定图像并计算参数
-├── ranging_calculator.py   # 测距计算器，基于视差计算距离
-├── ui_manager.py           # UI界面管理，PySide6 GUI实现
-├── common.py               # 公共配置、全局状态管理、摄像头自动检测
-├── requirements.txt        # Python依赖列表
-└── stereo_calib_params.npz # 标定参数文件（运行标定后生成）
+
+├── requirements.txt             # Python dependencies list
+├── README.md                    # Project documentation (Chinese)
+├── README_en.md                 # Project documentation (English)
+│
+├── src/                         # Distance measurement application source code
+|   ├── main.py                  # Main entry point, starts the application 
+│   ├── camera_manager.py        # Camera manager class, handles video capture, preview, and photography
+│   ├── ranging_calculator.py    # Distance calculator, computes distance based on disparity
+│   ├── ui_manager.py            # UI manager, PySide6 GUI implementation
+│   ├── common.py                # Common configuration, global state management, auto camera detection
+│   └── log_manager.py           # Log manager class
+│
+├── tools/                       # Calibration tools directory
+│   ├── capture_calib_images.py  # Calibration image capture tool
+│   ├── generate_calib_params.py # Calibration parameter generation tool
+│   ├── stereo_calib_params.npz  # Calibration parameter file (generated after calibration)
+│   └── calibration_images/      # Calibration image storage directory (auto-created at runtime)
+│       ├── left/                # Left camera calibration images
+│       └── right/               # Right camera calibration images
+│
+└── assets/                      # Assets directory
+    ├── test1.png                # Distance measurement demo image
+    └── pattern.png              # Chessboard pattern for calibration
 ```
 
-### 3.1 模块说明
+### Module Description
 
-| 文件 | 功能描述 |
+| File | Function |
 |------|----------|
-| `main.py` | 应用程序入口，初始化Qt应用并显示主窗口 |
-| `camera_manager.py` | `CameraManager`类：摄像头预览线程、参数设置、双目拍照 |
-| `camera_calibration.py` | 标定流程：采集棋盘格图像→角点检测→双目标定→参数保存 |
-| `ranging_calculator.py` | `RangingCalculator`类：加载标定参数、计算视差图、计算距离 |
-| `ui_manager.py` | `UIManager`类：主界面、预览页、拍照页、测距页、设置页 |
-| `common.py` | 全局配置（分辨率、设备路径）、`GlobalState`单例状态管理 |
-
-## 四、硬件要求
-
-### 4.1 双目摄像头（规格不硬性要求，以下是本项目使用规格）
-- **接口类型**: USB
-- **分辨率要求**: 
-  - 推荐分辨率: 2560×720（左右各1280×720）
-  - 支持其他宽高比 ≥ 1.8 的双目摄像头
-- **帧率**: 支持15fps以上
-- **输出格式**: YUYV/MJPG
-
-### 4.2 标定工具
-- **棋盘格标定板**: 9×6 内角点
-- **方格边长**: 约9mm（可用手机屏幕显示，具体长度根据实际情况调整）
-
-### 4.3 运行环境
-- **开发板/PC**: 支持USB摄像头
-- **内存**: 建议2GB以上
-- **GPU**: 不要求（纯CPU计算）
+| `main.py` | Application entry point, initializes Qt application and displays main window |
+| `src/camera_manager.py` | `CameraManager` class: camera preview thread, parameter settings, stereo photography |
+| `src/ranging_calculator.py` | `RangingCalculator` class: load calibration parameters, compute disparity map, calculate distance |
+| `src/ui_manager.py` | `UIManager` class: main interface, preview page, photo page, measurement page, settings page |
+| `src/common.py` | Global configuration (resolution, device path), `GlobalState` singleton state management |
+| `src/log_manager.py` | `LogManager` class: log collection and display |
+| `tools/capture_calib_images.py` | Calibration image capture: photograph chessboard image pairs and save |
+| `tools/generate_calib_params.py` | Calibration parameter generation: read image pairs, compute stereo calibration parameters |
 
 ---
 
-## 五、使用方法
+## Hardware Requirements
 
-### 5.1 摄像头标定（首次使用）
-```bash
-# 1. 修改 camera_calibration.py，取消 capture_calibration_images() 注释
-# 2. 运行标定程序，按 's' 保存图像对（至少10对）
-# 3. 按 'q' 退出采集
-# 4. 取消 calibrate_stereo_camera() 注释，运行标定计算
-python camera_calibration.py
+### Stereo Camera (Specifications are not mandatory; below are the specifications used in this project)
+- **Interface Type**: USB
+- **Resolution Requirements**:
+  - Recommended resolution: 2560×720 (1280×720 for each left/right)
+  - Supports other stereo cameras with aspect ratio ≥ 1.8
+- **Frame Rate**: Support for 15fps and above
+- **Output Format**: YUYV/MJPG
+
+### Calibration Tools (Recommended to print or can use phone display, but avoid glare)
+- **Chessboard Calibration Board**: 9×6 inner corners
+- **Square Edge Length**: Approximately 9mm (can be displayed on phone screen, specific length adjusts based on actual conditions)
+- **Calibration Images**: At least 10 pairs of images from different angles required
+
+### Runtime Environment
+- **Development Board/PC**: USB camera support
+- **Memory**: Recommended 2GB and above
+- **GPU**: Not required (pure CPU computation)
+
+---
+
+## Usage Workflow
+
+### Complete Distance Measurement Workflow
+
+```
+┌─────────────────────────────────────────────────────────────
+│            Distance Measurement Application Workflow         
+├─────────────────────────────────────────────────────────────
+│  Step 1: Calibration Image Capture                          
+│  ├── Run tools/capture_calib_images.py                     
+│  ├── Capture at least 15 pairs of chessboard images        
+│  └── Images saved to tools/calibration_images/            
+│                                                             
+│  Step 2: Calibration Parameter Generation                  
+│  ├── Run tools/generate_calib_params.py                    
+│  ├── Automatically read calibration images and compute     
+│  └── Generate tools/stereo_calib_params.npz               
+│                                                              
+│  Step 3: Run Distance Measurement Application              
+|  ├──  cd src                                                 
+│  ├── Run python3 main.py                                    
+│  ├── Click "Start Ranging Mode" to enter measurement mode  
+│  └── Click target position in preview to get distance      
+└─────────────────────────────────────────────────────────────
 ```
 
-### 5.2 运行主程序
+### Step 1: Calibration Image Capture
+
+**Command:**
+```bash
+python3 tools/capture_calib_images.py
+```
+
+**Operating Steps:**
+1. After startup, the program displays left and right camera preview images
+2. Place the chessboard calibration board in front of the camera at different positions and angles
+3. Press `s` key to save the current image pair (recommended to capture 15-20 pairs)
+4. Press `q` key to exit the capture program
+
+**Notes:**
+- Ensure the chessboard is completely visible in both left and right views
+- Try to cover different angles, distances, and positions
+- Avoid motion blur and glare
+
+### Step 2: Calibration Parameter Generation
+
+**Command:**
+```bash
+python tools/generate_calib_params.py
+```
+
+**Automatic Program Execution:**
+1. Read image pairs from `tools/calibration_images/` directory
+2. Detect chessboard corners
+3. Execute monocular and stereo calibration
+4. Calculate reprojection error
+5. Generate `tools/stereo_calib_params.npz` calibration parameter file
+
+**Output Information:**
+- Left/right camera reprojection error (ideal value <1)
+- Stereo reprojection error
+- Baseline distance
+- Intrinsic and extrinsic matrices
+
+### Step 3: Run Distance Measurement Application
+
+**Command:**
 ```bash
 python main.py
 ```
 
+**Button Function Description:**
+| Button | Function |
+|--------|----------|
+| Left Camera Preview | Preview left camera alone |
+| Right Camera Preview | Preview right camera alone |
+| Take Left/Right Picture | Stereo photography (saved to /tmp/) |
+| Start Ranging Mode | Enter distance measurement mode |
 
-### 5.3 测距操作
-1. 点击"Start Ranging Mode"进入测距页面
-2. 在画面上点击目标位置
-4. 等待距离计算结果显示
+**Distance Measurement Operation:**
+1. Click **"Start Ranging Mode"** to enter measurement mode
+2. Click the target position in the preview image
+3. Wait for the distance calculation result to display in the top status bar
 
-**测距结果显示：**
+**Distance Measurement Result Display:**
 
-![测距结果显示](test1.png)
+![Distance Measurement Result Display](assets/test1.png)
 
 ---
 
-## 六、技术原理
+## Calibration Parameter Configuration
 
-### 6.1 双目测距原理
+To modify calibration parameters, edit the configuration in `tools/capture_calib_images.py` and `tools/generate_calib_params.py`:
+
+```python
+# Number of chessboard inner corners (columns × rows)
+CHESSBOARD_SIZE = (9, 6)
+
+# Chessboard square edge length (meters), set based on actual physical length of each square during measurement
+SQUARE_SIZE = 0.009  # 9mm
+
+# Camera device nodes, stereo camera installation nodes vary by device and need specific configuration
+CAM_ID = "/dev/video0"
 ```
-距离 Z = (f × B) / d
 
-其中:
-- f: 焦距（像素）
-- B: 基线距离（米）
-- d: 视差（像素）
+---
+
+## Technical Principles
+
+### Stereo Distance Measurement Principle
+```
+Distance Z = (f × B) / d
+
+Where:
+- f: Focal length (pixels)
+- B: Baseline distance (meters)
+- d: Disparity (pixels)
 ```
 
-### 6.2 算法流程
-1. 左右图像采集
-2. 立体校正（基于标定参数）
-3. SGBM视差计算
-4. 视差转3D坐标
-5. 提取目标点距离
+### Algorithm Workflow
+1. Capture left and right images
+2. Stereo rectification (based on calibration parameters)
+3. SGBM disparity calculation
+4. Disparity to 3D coordinate conversion
+5. Extract target point distance
+
+---
