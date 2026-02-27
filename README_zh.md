@@ -166,7 +166,7 @@ python3 tools/capture_calib_images.py
 
 **运行命令：**
 ```bash
-python tools/generate_calib_params.py
+python3 tools/generate_calib_params.py
 ```
 
 **程序自动执行：**
@@ -186,7 +186,8 @@ python tools/generate_calib_params.py
 
 **运行命令：**
 ```bash
-python main.py
+cd src
+python3 main.py
 ```
 
 **功能按钮说明：**
@@ -219,8 +220,6 @@ CHESSBOARD_SIZE = (9, 6)
 # 棋盘格方格边长（米），根据实际测量时每个方格真实物理长度设置
 SQUARE_SIZE = 0.009  # 9mm
 
-# 摄像头设备节点,每台设备的双目摄像头安装节点可能不同，需要具体配置
-CAM_ID = "/dev/video0"
 ```
 
 ---

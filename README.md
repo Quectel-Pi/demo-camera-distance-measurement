@@ -167,7 +167,7 @@ python3 tools/capture_calib_images.py
 
 **Command:**
 ```bash
-python tools/generate_calib_params.py
+python3 tools/generate_calib_params.py
 ```
 
 **Automatic Program Execution:**
@@ -187,7 +187,8 @@ python tools/generate_calib_params.py
 
 **Command:**
 ```bash
-python main.py
+cd src
+python3 main.py
 ```
 
 **Button Function Description:**
@@ -220,8 +221,6 @@ CHESSBOARD_SIZE = (9, 6)
 # Chessboard square edge length (meters), set based on actual physical length of each square during measurement
 SQUARE_SIZE = 0.009  # 9mm
 
-# Camera device nodes, stereo camera installation nodes vary by device and need specific configuration
-CAM_ID = "/dev/video0"
 ```
 
 ---
