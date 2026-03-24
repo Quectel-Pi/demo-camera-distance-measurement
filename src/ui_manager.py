@@ -1,13 +1,15 @@
 # -*- coding: gbk -*-
 import os
+import sys
 import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QCheckBox, QMessageBox, QGroupBox,
-    QSizePolicy, QGridLayout, QTextEdit
+    QSizePolicy, QGridLayout, QTextEdit, QScrollArea, QScrollBar,
+    QScroller
 )
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QFont, QPixmap, QImage, QMouseEvent, QTextCursor
+from PySide6.QtCore import Qt, QTimer, QSize, QRect, QEvent, QPointF
+from PySide6.QtGui import QFont, QPixmap, QImage, QMouseEvent, QTextCursor, QScreen
 from common import PREVIEW_WIDTH, PREVIEW_HEIGHT, g_state, CAPTURE_L_PATH, CAPTURE_R_PATH
 from camera_manager import CameraManager, mat_to_qimage
 from ranging_calculator import RangingCalculator
@@ -16,7 +18,10 @@ import cv2
 
 
 class ScalableLabel(QLabel):
-    """可自适应比例缩放的预览标签，支持双击切换全屏"""
+    """可自适应比例缩放的预览标签，支持双击切换全屏和点击测距"""
+    # 类级别的回调函数
+    _click_callback = None
+    
     def __init__(self, aspect_ratio=16/9, parent=None):
         super().__init__(parent)
         self._aspect_ratio = aspect_ratio
@@ -27,6 +32,14 @@ class ScalableLabel(QLabel):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setStyleSheet("background:#333; color:white; border-radius:8px;")
         self.setAlignment(Qt.AlignCenter)
+        # 启用鼠标追踪，确保能接收到鼠标事件
+        self.setMouseTracking(True)
+        # 启用触摸事件支持
+        self.setAttribute(Qt.WA_AcceptTouchEvents, True)
+        # 触摸双击检测
+        self._last_touch_time = 0
+        self._last_touch_pos = QPointF()
+        self._touch_double_click_threshold = 400  # 毫秒
 
     def setPixmap(self, pixmap):
         self._pixmap = pixmap
@@ -85,6 +98,64 @@ class ScalableLabel(QLabel):
             if hasattr(self.parent(), 'parent') and hasattr(self.parent().parent(), '_toggle_fullscreen_preview'):
                 self.parent().parent()._toggle_fullscreen_preview()
         super().mouseDoubleClickEvent(event)
+    
+    def mousePressEvent(self, event):
+        """鼠标点击触发测距"""
+        if event.button() == Qt.LeftButton and self._click_callback:
+            # 使用 localPos 获取本地坐标
+            self._click_callback(event.localPos())
+        super().mousePressEvent(event)
+    
+    def touchEvent(self, event):
+        """触摸事件处理"""
+        import time
+        if event.type() == QEvent.Type.TouchBegin:
+            touch_points = event.touchPoints()
+            if touch_points:
+                pos = touch_points[0].pos()
+                current_time = int(time.time() * 1000)  # 毫秒
+                
+                # 检测双击：两次触摸间隔小于阈值且位置相近
+                is_double_tap = (
+                    current_time - self._last_touch_time < self._touch_double_click_threshold and
+                    (pos - self._last_touch_pos).manhattanLength() < 50
+                )
+                
+                if is_double_tap:
+                    # 双击切换全屏
+                    if hasattr(self.parent(), 'parent') and hasattr(self.parent().parent(), '_toggle_fullscreen_preview'):
+                        self.parent().parent()._toggle_fullscreen_preview()
+                elif self._click_callback:
+                    # 单击触发测距
+                    self._click_callback(pos)
+                
+                # 记录本次触摸信息
+                self._last_touch_time = current_time
+                self._last_touch_pos = pos
+            
+            event.accept()
+            return
+        super().touchEvent(event)
+    
+    def event(self, event):
+        """重写event方法确保能捕获触摸事件"""
+        if event.type() == QEvent.Type.TouchBegin:
+            self.touchEvent(event)
+            return True
+        return super().event(event)
+
+
+class TouchScrollTextEdit(QTextEdit):
+    """支持触摸滚动的日志文本框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 启用 QScroller 实现触摸滚动
+        QScroller.grabGesture(self.viewport(), QScroller.ScrollerGestureType.TouchGesture)
+        
+    def event(self, event):
+        # 让 QScroller 处理触摸事件
+        return super().event(event)
 
 
 class UIManager(QWidget):
@@ -97,6 +168,31 @@ class UIManager(QWidget):
         }
         QLabel {
             background-color: transparent;
+        }
+        /* 滚动区域样式 */
+        QScrollArea {
+            background-color: transparent;
+            border: none;
+        }
+        QScrollBar:vertical {
+            background-color: #313244;
+            width: 14px;
+            border-radius: 7px;
+            margin: 2px;
+        }
+        QScrollBar::handle:vertical {
+            background-color: #585b70;
+            border-radius: 7px;
+            min-height: 30px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background-color: #6c7086;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
         }
         #tips_label {
             background-color: #313244;
@@ -221,12 +317,16 @@ class UIManager(QWidget):
         
         # 窗口配置
         self.setWindowTitle("Camera Distance Measurement")
-        self.setMinimumSize(1200, 800)
-        self.resize(1400, 900)
+        
+        # 自适应屏幕大小
+        self._setup_window_size()
 
         # 初始化布局
         self._init_main_layout()
         g_state.preview_label = self.preview_label
+        
+        # 设置预览标签的点击回调
+        ScalableLabel._click_callback = self._handle_preview_click
 
         # 初始化日志
         LogManager.append_log("Starting Camera Distance Mesurement Application", "INFO")
@@ -257,6 +357,46 @@ class UIManager(QWidget):
 
         LogManager.append_log("UI initialized successfully", "INFO")
 
+    def _setup_window_size(self):
+        """根据屏幕大小自适应设置窗口尺寸"""
+        screen = self.screen()
+        if screen is None:
+            # 如果获取不到屏幕，使用默认值
+            self.setMinimumSize(800, 600)
+            self.resize(1200, 800)
+            return
+        
+        # 获取屏幕可用区域（排除任务栏等）
+        available_geometry = screen.availableGeometry()
+        screen_width = available_geometry.width()
+        screen_height = available_geometry.height()
+        
+        # 计算窗口大小（占屏幕的85%）
+        window_width = int(screen_width * 0.85)
+        window_height = int(screen_height * 0.85)
+        
+        # 设置合理的最小尺寸（不小于屏幕的50%）
+        min_width = min(800, int(screen_width * 0.5))
+        min_height = min(600, int(screen_height * 0.5))
+        self.setMinimumSize(min_width, min_height)
+        
+        # 设置窗口大小，但不超过屏幕可用区域
+        self.resize(
+            min(window_width, screen_width - 50),
+            min(window_height, screen_height - 50)
+        )
+        
+        # 居中显示窗口
+        self._center_window(available_geometry)
+
+    def _center_window(self, available_geometry: QRect):
+        """将窗口居中显示"""
+        window_width = self.width()
+        window_height = self.height()
+        x = available_geometry.x() + (available_geometry.width() - window_width) // 2
+        y = available_geometry.y() + (available_geometry.height() - window_height) // 2
+        self.move(x, y)
+
     def _init_main_layout(self):
         main_v = QVBoxLayout(self)
         main_v.setContentsMargins(20, 20, 20, 20)
@@ -280,7 +420,7 @@ class UIManager(QWidget):
         left_v.setContentsMargins(0, 0, 0, 0)
         left_v.setSpacing(15)
 
-        # 预览区（支持双击）
+        # 预览区（支持双击和点击测距）
         self.preview_label = ScalableLabel(aspect_ratio=PREVIEW_WIDTH/PREVIEW_HEIGHT)
         self.preview_label.setText("Please click buttons to start camera mode")
         left_v.addWidget(self.preview_label, stretch=8)
@@ -305,22 +445,32 @@ class UIManager(QWidget):
 
         self.bottom_h_layout.addWidget(left_w)
 
-        # ===== 右栏：日志区 + 相机控制区（保存为实例变量） =====
+        # ===== 右栏：日志区 + 相机控制区（包装在ScrollArea中） =====
+        self.right_scroll = QScrollArea()
+        self.right_scroll.setWidgetResizable(True)
+        self.right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.right_scroll.setFrameShape(QScrollArea.NoFrame)  # 无边框
+   
+        
         self.right_widget = QWidget()
         right_v = QVBoxLayout(self.right_widget)
-        right_v.setContentsMargins(0, 0, 0, 0)
+        right_v.setContentsMargins(5, 0, 5, 0)
         right_v.setSpacing(10)
 
         log_group = QGroupBox("Log")
         log_layout = QVBoxLayout(log_group)
         log_layout.setContentsMargins(0, 0, 0, 0)
-        self.log_edit = QTextEdit()
+        # 使用支持触摸滚动的自定义 QTextEdit
+        self.log_edit = TouchScrollTextEdit()
         self.log_edit.setObjectName("log_text_edit")
         self.log_edit.setReadOnly(True)
         self.log_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.log_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # 设置日志区的最小高度，防止被压缩太小
+        self.log_edit.setMinimumHeight(120)
         log_layout.addWidget(self.log_edit)
-        right_v.addWidget(log_group)
+        right_v.addWidget(log_group, stretch=3)  # 日志区占3份
 
         cam_ctrl_group = QGroupBox("Camera Control")
         cam_ctrl_v = QVBoxLayout(cam_ctrl_group)
@@ -328,9 +478,12 @@ class UIManager(QWidget):
         self._create_basic_params(cam_ctrl_v)
         self._create_advanced_params(cam_ctrl_v)
         self._create_ctrl_buttons(cam_ctrl_v)
-        right_v.addWidget(cam_ctrl_group)
-
-        self.bottom_h_layout.addWidget(self.right_widget)
+        right_v.addWidget(cam_ctrl_group, stretch=2)  # 控制区占2份
+        
+        right_v.addStretch()  # 底部弹性空间
+        
+        self.right_scroll.setWidget(self.right_widget)
+        self.bottom_h_layout.addWidget(self.right_scroll)
         main_v.addLayout(self.bottom_h_layout)
 
         # 绑定按钮事件
@@ -517,12 +670,12 @@ class UIManager(QWidget):
         if self._is_fullscreen_preview:
             self.bottom_h_layout.setStretch(0, 100)
             self.bottom_h_layout.setStretch(1, 0)
-            self.right_widget.hide()
+            self.right_scroll.hide()
             self.preview_label.setStyleSheet("background:#333; color:white; border-radius:0px;")
         else:
             self.bottom_h_layout.setStretch(0, 6)
             self.bottom_h_layout.setStretch(1, 4)
-            self.right_widget.show()
+            self.right_scroll.show()
             self.preview_label.setStyleSheet("background:#333; color:white; border-radius:8px;")
 
     def update_tips(self, text):
@@ -582,40 +735,41 @@ class UIManager(QWidget):
             scroll = self.log_edit.verticalScrollBar()
             old_value = scroll.value()
             old_max = scroll.maximum()
-        was_at_bottom = (old_value >= old_max - 5)
+            was_at_bottom = (old_value >= old_max - 5)
 
-        # 更新内容
-        self.log_edit.setHtml(html)
+            # 更新内容
+            self.log_edit.setHtml(html)
 
-        if was_at_bottom:
-            cursor = self.log_edit.textCursor()
-            cursor.movePosition(QTextCursor.End)
-            self.log_edit.setTextCursor(cursor)
-            self.log_edit.ensureCursorVisible()
-        else:
-            new_max = scroll.maximum()
-            if new_max > 0:
-                new_value = int(old_value * new_max / max(old_max, 1))
-                scroll.setValue(new_value)
+            if was_at_bottom:
+                cursor = self.log_edit.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                self.log_edit.setTextCursor(cursor)
+                self.log_edit.ensureCursorVisible()
+            else:
+                new_max = scroll.maximum()
+                if new_max > 0:
+                    new_value = int(old_value * new_max / max(old_max, 1))
+                    scroll.setValue(new_value)
 
-    def mousePressEvent(self, e: QMouseEvent):
-        """鼠标点击预览区触发测距"""
+    def _handle_preview_click(self, pos):
+        """处理预览区域的点击事件 - 触发测距
+        
+        Args:
+            pos: QPointF 类型的位置对象，表示点击的本地坐标
+        """
         if g_state.current_cam != 0 or g_state.preview_label is None:
-            super().mousePressEvent(e)
             return
-
-        # 计算预览区内的相对坐标
-        pos = self.preview_label.mapFromGlobal(self.cursor().pos())
+        
+        # 检查是否在预览标签范围内
         if not (0 <= pos.x() <= self.preview_label.width() and 0 <= pos.y() <= self.preview_label.height()):
-            super().mousePressEvent(e)
             return
 
         # 转换为图像原始坐标
         scale, ox, oy = self.preview_label.get_scale_offset()
         img_x = (pos.x() - ox) / scale
         img_y = (pos.y() - oy) / scale
+        
         if not (0 <= img_x <= PREVIEW_WIDTH and 0 <= img_y <= PREVIEW_HEIGHT):
-            super().mousePressEvent(e)
             return
 
         # 触发测距
@@ -623,4 +777,3 @@ class UIManager(QWidget):
         g_state.has_click = True
         LogManager.append_log(f"Ranging click at: ({int(img_x)}, {int(img_y)})", "DEBUG")
         threading.Thread(target=self._ranging_calculator.calculate_distance, daemon=True).start()
-        super().mousePressEvent(e)

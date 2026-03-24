@@ -48,6 +48,9 @@ pip install numpy>=1.24.0
 ```bash
 # V4L2工具（用于摄像头参数读取）
 sudo apt-get install v4l-utils
+
+# 启动QT软键盘
+sudo apt install qtvirtualkeyboard-plugin
 ```
 
 ---

@@ -22,7 +22,7 @@ class CameraSettings:
         self.sharpness = 3
         self.backlight = 0
         self.exposure = 50
-        self.auto_exposure = False
+        self.auto_exposure = True
         self.white_balance = 4600
         self.auto_white_balance = True
 
@@ -108,6 +108,7 @@ class CameraManager:
         if not cap.isOpened():
             LogManager.append_log(f"Error: Failed to open camera index {cam_idx}","ERROR")
             return
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, STEREO_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, STEREO_HEIGHT)
         cap.set(cv2.CAP_PROP_FPS, 15)
@@ -283,7 +284,7 @@ class CameraManager:
         cap.set(cv2.CAP_PROP_GAMMA, settings.gamma)
         cap.set(cv2.CAP_PROP_SHARPNESS, settings.sharpness - 1)
         cap.set(cv2.CAP_PROP_BACKLIGHT, settings.backlight)
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25 if settings.auto_exposure else 0.75)
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75 if settings.auto_exposure else 0.25)
         cap.set(cv2.CAP_PROP_EXPOSURE, settings.exposure)
         cap.set(cv2.CAP_PROP_AUTO_WB, 1.0 if settings.auto_white_balance else 0.0)
         cap.set(cv2.CAP_PROP_WHITE_BALANCE_BLUE_U, settings.white_balance)

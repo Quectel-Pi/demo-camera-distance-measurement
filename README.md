@@ -49,6 +49,9 @@ pip install numpy>=1.24.0
 ```bash
 # V4L2 tools (for camera parameter reading)
 sudo apt-get install v4l-utils
+
+#  Launch QT virtual keyboard
+sudo apt install qtvirtualkeyboard-plugin
 ```
 
 ---
