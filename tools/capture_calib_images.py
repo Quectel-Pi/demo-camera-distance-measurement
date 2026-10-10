@@ -1,215 +1,380 @@
-# -*- coding: gbk -*-
+# -*- coding: utf-8 -*-
+
 """
-±ê¶¨Í¼Ïñ²É¼¯¹¤¾ß
-ÓÃÓÚÅÄÉãË«Ä¿ÉãÏñÍ·µÄ±ê¶¨Í¼Ïñ¶Ô
+
+æ ‡å®šå›¾åƒé‡‡é›†å·¥å…·
+
+ç”¨äºæ‹æ‘„åŒç›®æ‘„åƒå¤´çš„æ ‡å®šå›¾åƒå¯¹
+
 """
+
 import cv2
+
 import numpy as np
+
 import os
+
 import glob
+
 import time
+
 import subprocess
+
 import re
 
-# »ñÈ¡µ±Ç°½Å±¾ËùÔÚÄ¿Â¼
+# è·å–å½“å‰è„šæœ¬æ‰€åœ¨ç›®å½•
+
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
-# ÏîÄ¿¸ùÄ¿Â¼
+
+# é¡¹ç›®æ ¹ç›®å½•
+
 PROJECT_ROOT = os.path.dirname(TOOLS_DIR)
 
 # ====================== Calibration Parameter Configuration ======================
-# ÆåÅÌ¸ñÄÚ½ÇµãÊıÁ¿£¨9ÁĞ¡Á6ĞĞ£¬ĞèÆ¥ÅäÊµ¼ÊÆåÅÌ¸ñ£©
+
+# æ£‹ç›˜æ ¼å†…è§’ç‚¹æ•°é‡ï¼ˆ9åˆ—Ã—6è¡Œï¼Œéœ€åŒ¹é…å®é™…æ£‹ç›˜æ ¼ï¼‰
+
 CHESSBOARD_SIZE = (9, 6)  
-# ÆåÅÌ¸ñ·½¸ñ±ß³¤£¨¸ù¾İÊµ¼Ê·½¸ñ´óĞ¡ĞŞ¸Ä´Ë²ÎÊı£©
+
+# æ£‹ç›˜æ ¼æ–¹æ ¼è¾¹é•¿ï¼ˆæ ¹æ®å®é™…æ–¹æ ¼å¤§å°ä¿®æ”¹æ­¤å‚æ•°ï¼‰
+
 SQUARE_SIZE = 0.009        
-# ±ê¶¨Í¼Ïñ±£´æÄ¿Â¼
+
+# æ ‡å®šå›¾åƒä¿å­˜ç›®å½•
+
 CALIB_IMG_DIR = os.path.join(TOOLS_DIR, "calibration_images")
-# ±ê¶¨½á¹û±£´æÎÄ¼ş
+
+# æ ‡å®šç»“æœä¿å­˜æ–‡ä»¶
+
 CALIB_RESULT_FILE = os.path.join(TOOLS_DIR, "stereo_calib_params.npz")
 
-
 def detect_stereo_camera():
+
     """
-    ¼ì²âË«Ä¿ÉãÏñÍ·
+
+    æ£€æµ‹åŒç›®æ‘„åƒå¤´
+
     
+
     Returns:
-        tuple: (camera_device, stereo_width, stereo_height) »ò (None, 0, 0)
+
+        tuple: (camera_device, stereo_width, stereo_height) æˆ– (None, 0, 0)
+
     """
+
     print("=" * 50)
+
     print("Detecting stereo camera...")
+
     
-    # ²éÕÒËùÓĞ video Éè±¸
+
+    # æŸ¥æ‰¾æ‰€æœ‰ video è®¾å¤‡
+
     if os.name == 'nt':  # Windows
+
         devices = [f"\\\\?\\video{i}" for i in range(10)]
+
     else:  # Linux
+
         devices = sorted(glob.glob("/dev/video*"), key=lambda x: int(x.replace("/dev/video", "")))
+
     
+
     stereo_devices = []
+
     
+
     for dev in devices:
+
         if os.name != 'nt' and not os.path.exists(dev):
+
             continue
+
             
+
         cap = cv2.VideoCapture(dev, cv2.CAP_V4L2 if os.name != 'nt' else cv2.CAP_ANY)
+
         if not cap.isOpened():
+
             continue
+
         
+
         try:
-            # »ñÈ¡Ö§³ÖµÄ×î´ó·Ö±æÂÊ
+
+            # è·å–æ”¯æŒçš„æœ€å¤§åˆ†è¾¨ç‡
+
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 4096)
+
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
+
             
+
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
             
+
             if width > 0 and height > 0:
-                # ¼ì²éÊÇ·ñÊÇË«Ä¿ÉãÏñÍ·£¨¿í¶ÈÊÇ¸ß¶ÈµÄ2±¶ÒÔÉÏ£©
+
+                # æ£€æŸ¥æ˜¯å¦æ˜¯åŒç›®æ‘„åƒå¤´
+
                 aspect_ratio = width / height
-                is_stereo = aspect_ratio >= 1.8  # Ë«Ä¿Í¨³£ÊÇ 16:9 »ò¸ü¿í
+
+                is_stereo = aspect_ratio >= 1.8  # åŒç›®é€šå¸¸æ˜¯ 16:9 æˆ–æ›´å®½
+
                 
+
                 print(f"  {dev}: {width}x{height} (ratio: {aspect_ratio:.2f}) {'[STEREO]' if is_stereo else ''}")
+
                 
+
                 if is_stereo:
+
                     stereo_devices.append((dev, width, height))
+
         finally:
+
             cap.release()
+
     
+
     if stereo_devices:
-        # Ñ¡Ôñ·Ö±æÂÊ×î¸ßµÄÉè±¸
+
+        # é€‰æ‹©åˆ†è¾¨ç‡æœ€é«˜çš„è®¾å¤‡
+
         best = max(stereo_devices, key=lambda x: x[1] * x[2])
+
         print(f"\nSelected stereo camera: {best[0]} ({best[1]}x{best[2]})")
+
         print("=" * 50)
+
         return best
+
     else:
+
         print("\nNo stereo camera detected!")
+
         print("=" * 50)
+
         return None, 0, 0
 
-
 def create_dir(dir_path):
+
     if not os.path.exists(dir_path):
+
         os.makedirs(dir_path)
+
         print(f"Create directory: {dir_path}")
 
-
 def capture_calibration_images():
-    """²É¼¯Ë«Ä¿ÉãÏñÍ·µÄ±ê¶¨Í¼Ïñ¶Ô"""
+
+    """é‡‡é›†åŒç›®æ‘„åƒå¤´çš„æ ‡å®šå›¾åƒå¯¹"""
+
     
-    # ¼ì²âË«Ä¿ÉãÏñÍ·
+
+    # æ£€æµ‹åŒç›®æ‘„åƒå¤´
+
     cam_dev, cam_width, cam_height = detect_stereo_camera()
+
     
+
     if cam_dev is None:
+
         print("Error: No stereo camera detected! Please check camera connection.")
+
         return
+
     
-    # ÉèÖÃÉãÏñÍ·²ÎÊı
+
+    # è®¾ç½®æ‘„åƒå¤´å‚æ•°
+
     cam_fps = 30
+
     left_width = cam_width // 2
+
     right_width = cam_width // 2
+
     
+
     left_dir = os.path.join(CALIB_IMG_DIR, "left")
+
     right_dir = os.path.join(CALIB_IMG_DIR, "right")
+
     create_dir(left_dir)
+
     create_dir(right_dir)
 
-    # ´ò¿ªÉãÏñÍ·£¨V4L2½Ó¿Ú£©
+    # æ‰“å¼€æ‘„åƒå¤´ï¼ˆV4L2æ¥å£ï¼‰
+
     cap = cv2.VideoCapture(cam_dev, cv2.CAP_V4L2)
+
     if not cap.isOpened():
+
         print(f"Error: Failed to open camera! Check device node {cam_dev}")
+
         return
 
-    # ²ÎÊıÉèÖÃË³Ğò£ºÏÈÉè·Ö±æÂÊ/Ö¡ÂÊ£¬ÔÙÉèFourCC
+    # å‚æ•°è®¾ç½®é¡ºåºï¼šå…ˆè®¾åˆ†è¾¨ç‡/å¸§ç‡ï¼Œå†è®¾FourCCï¼Œé˜²æ­¢V4L2 é‡ç½®åˆ†è¾¨ç‡
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
+
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
+
     cap.set(cv2.CAP_PROP_FPS, cam_fps)
+
     
-    # Ç¿ÖÆÉèÖÃYUYV¸ñÊ½
+
+    # å¼ºåˆ¶è®¾ç½®YUYVæ ¼å¼
+
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'YUYV'))
 
-    # Ğ£ÑéÉãÏñÍ·Êµ¼Ê²ÎÊı
+    # æ ¡éªŒæ‘„åƒå¤´å®é™…å‚æ•°
+
     actual_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+
     actual_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
     actual_fps = cap.get(cv2.CAP_PROP_FPS)
+
     actual_fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+
     fourcc_str = "".join([chr((actual_fourcc >> 8*i) & 0xFF) for i in range(3,-1,-1)])
+
     
+
     print(f"\n===== Camera Parameter Check =====")
+
     print(f"Expected: {cam_width}x{cam_height} @ {cam_fps}fps, YUYV")
+
     print(f"Actual: {actual_width}x{actual_height} @ {actual_fps}fps, FourCC: {fourcc_str}")
 
     print("Clearing camera buffer...")
+
     for _ in range(10):
+
         cap.read()
+
     time.sleep(0.1)
 
     img_count = 0
+
     print("\n===== Start Calibration Image Capture =====")
+
     print("1. Place phone chessboard in front of camera (adjust angle/distance)")
+
     print("2. Press 's' to save image pair (at least 15 pairs required)")
+
     print("3. Press 'q' to exit capture")
 
-    # Ëõ·ÅÏÔÊ¾²ÎÊı
+    # ç¼©æ”¾æ˜¾ç¤ºå‚æ•°
+
     display_scale = 0.5 
+
     display_width = int(cam_width * display_scale)
+
     display_height = int(cam_height * display_scale)
+
     left_display_width = int(left_width * display_scale)
 
     while True:
+
         start_time = time.time()
+
         ret, frame_combined = cap.read()
+
         if not ret or frame_combined is None:
+
             print("Warning: Failed to read camera frame, skip")
+
             continue
 
-        # ¼ì²éÖ¡³ß´çÊÇ·ñ·ûºÏÔ¤ÆÚ
+        # æ£€æŸ¥å¸§å°ºå¯¸æ˜¯å¦ç¬¦åˆé¢„æœŸ
+
         if frame_combined.shape[1] != cam_width or frame_combined.shape[0] != cam_height:
+
             print(f"Warning: Frame size mismatch! Expected {cam_width}x{cam_height}, got {frame_combined.shape[1]}x{frame_combined.shape[0]}")
+
             continue
 
-        # ·Ö¸î×óÓÒÉãÏñÍ·Í¼Ïñ
+        # åˆ†å‰²å·¦å³æ‘„åƒå¤´å›¾åƒ
+
         frame_left = frame_combined[:, 0:left_width]
+
         frame_right = frame_combined[:, right_width:cam_width]
 
-        # ¼ì²é·Ö¸îºóµÄÖ¡·Ç¿Õ
+        # æ£€æŸ¥åˆ†å‰²åçš„å¸§éç©º
+
         if frame_left.size == 0 or frame_right.size == 0:
+
             print("Warning: Split frame is empty, skip")
+
             continue
 
-        # Ëõ·ÅÏÔÊ¾Í¼Ïñ
+        # ç¼©æ”¾æ˜¾ç¤ºå›¾åƒ
+
         frame_left_display = cv2.resize(frame_left, (left_display_width, display_height))
+
         frame_right_display = cv2.resize(frame_right, (left_display_width, display_height))
 
-        # Ìí¼ÓÌáÊ¾ÎÄ×Ö
+        # æ·»åŠ æç¤ºæ–‡å­—
+
         cv2.putText(frame_left_display, f"Captured: {img_count} | 's' save | 'q' exit", 
+
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
         cv2.putText(frame_right_display, "Right Camera (Phone Chessboard)", 
+
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
         
+
         cv2.imshow("Left Camera (Scaled)", frame_left_display)
+
         cv2.imshow("Right Camera (Scaled)", frame_right_display)
 
-        # °´¼ü´¦Àí
+        # æŒ‰é”®å¤„ç†
+
         key = cv2.waitKey(1) & 0xFF
+
         if key == ord('s'):
-            # ±£´æÍ¼Ïñ¶Ô
+
+            # ä¿å­˜å›¾åƒå¯¹
+
             left_img_path = os.path.join(left_dir, f"left_{img_count:03d}.jpg")
+
             right_img_path = os.path.join(right_dir, f"right_{img_count:03d}.jpg")
+
             cv2.imwrite(left_img_path, frame_left)
+
             cv2.imwrite(right_img_path, frame_right)
+
             print(f"Saved {img_count+1}th pair: {left_img_path} | {right_img_path}")
+
             img_count += 1
+
         elif key == ord('q'):
+
             break
 
-        # ¿ØÖÆÖ¡ÂÊ
+        # æ§åˆ¶å¸§ç‡
+
         elapsed_time = time.time() - start_time
+
         sleep_time = max(0, 1/cam_fps - elapsed_time)
+
         time.sleep(sleep_time)
 
-    # ÊÍ·Å×ÊÔ´
+    # é‡Šæ”¾èµ„æº
+
     cap.release()
+
     cv2.destroyAllWindows()
+
     print(f"\nCapture finished! Total {img_count} pairs saved to {CALIB_IMG_DIR}")
 
 if __name__ == "__main__":
+
     capture_calibration_images()
 

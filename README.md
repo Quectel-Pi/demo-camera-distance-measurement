@@ -3,7 +3,7 @@
 
 English| [中文](README_zh.md)
 
-This project is a stereo camera distance measurement application implemented on Quectel Pi H1 single-board computer. Click on objects in the camera preview to calculate the real-world distance between the camera and the objects.
+This project is a stereo camera distance measurement application implemented on Quectel Pi H1 single-board computer. Click on objects in the camera preview to calculate the actual physical distance (depth) between the camera and the objects.
 
 ![Distance Measurement Result Display](assets/test1.png)
 
@@ -13,8 +13,8 @@ This project is a stereo camera distance measurement application implemented on 
    - Uses SGBM stereo matching algorithm
    - Supports calibration parameter optimization for improved accuracy
 - Individual left/right camera preview support
-- Simultaneous capture of left and right camera images for comparison
-- Camera parameter adjustment support for optimized matching results
+- Synchronized capture of left and right camera images for comparison
+- Camera image parameter adjustment (Sensor/ISP parameter control) support for optimized matching results
    - Brightness, contrast, saturation adjustment
    - Exposure time/auto exposure
    - White balance/auto white balance
@@ -33,7 +33,11 @@ This project is a stereo camera distance measurement application implemented on 
 
 ### Dependency Installation
 
+Debian 12/13 marks the system Python environment as externally-managed (PEP 668), so a direct `pip install` is blocked. Use a virtual environment:
+
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -58,8 +62,8 @@ sudo apt-get install v4l-utils
 ```
 
 ├── requirements.txt             # Python dependencies list
-├── README.md                    # Project documentation (Chinese)
-├── README_en.md                 # Project documentation (English)
+├── README.md                    # Project documentation (English)
+├── README_zh.md                 # Project documentation (Chinese)
 │
 ├── src/                         # Distance measurement application source code
 |   ├── main.py                  # Main entry point, starts the application 
@@ -110,7 +114,7 @@ sudo apt-get install v4l-utils
 ### Calibration Tools (Recommended to print or can use phone display, but avoid glare)
 - **Chessboard Calibration Board**: 9×6 inner corners
 - **Square Edge Length**: Approximately 9mm (can be displayed on phone screen, specific length adjusts based on actual conditions)
-- **Calibration Images**: At least 10 pairs of images from different angles required
+- **Calibration Images**: At least 15 pairs of images from different angles required (20+ recommended)
 
 ### Runtime Environment
 - **Development Board/PC**: USB camera support
@@ -178,7 +182,7 @@ python3 tools/generate_calib_params.py
 5. Generate `tools/stereo_calib_params.npz` calibration parameter file
 
 **Output Information:**
-- Left/right camera reprojection error (ideal value <1)
+- Left/right camera reprojection error (ideal ≤ 0.5, excellent < 0.3)
 - Stereo reprojection error
 - Baseline distance
 - Intrinsic and extrinsic matrices
@@ -198,6 +202,9 @@ python3 main.py
 | Right Camera Preview | Preview right camera alone |
 | Take Left/Right Picture | Stereo photography (saved to /tmp/) |
 | Start Ranging Mode | Enter distance measurement mode |
+| Save Parameters | Save current camera image parameters (effective after restarting the camera) |
+| Reset Parameters | Restore camera image parameters to initial values |
+| Stop Camera | Stop capture and release the camera, reset the preview area |
 
 **Distance Measurement Operation:**
 1. Click **"Start Ranging Mode"** to enter measurement mode

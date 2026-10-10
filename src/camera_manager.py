@@ -1,299 +1,532 @@
-# -*- coding: gbk -*-
+# -*- coding: utf-8 -*-
+
 import threading
+
 import time
+
 import cv2
+
 import numpy as np
+
 from log_manager import LogManager
+
 from PySide6.QtGui import QImage, QPixmap
+
 from PySide6.QtWidgets import QLabel
+
 from common import (
+
     STEREO_WIDTH, STEREO_HEIGHT, PREVIEW_WIDTH, PREVIEW_HEIGHT,
+
     CAMERA_DEV, CAPTURE_L_PATH, CAPTURE_R_PATH, g_state
+
 )
 
 class CameraSettings:
-    """ÉãÏñÍ·²ÎÊıÉèÖÃ"""
+
+    """æ‘„åƒå¤´å‚æ•°è®¾ç½®"""
+
     def __init__(self):
-        self.brightness = 50
+
+        self.brightness = 0
+
         self.contrast = 0
+
         self.saturation = 36
+
         self.hue = 0
+
         self.gamma = 100
+
         self.sharpness = 3
+
         self.backlight = 0
+
         self.exposure = 50
-        self.auto_exposure = False
+
+        self.auto_exposure = True
+
         self.white_balance = 4600
+
         self.auto_white_balance = True
 
 class CameraManager:
-    """ÉãÏñÍ·¹ÜÀíÀà"""
+
+    """æ‘„åƒå¤´ç®¡ç†ç±»"""
+
     
+
     def __init__(self):
+
         self._preview_thread = None
+
         self._camera_settings = CameraSettings()
+
         
+
         self._initial_settings = CameraSettings()
+
         
-        # ³õÊ¼»¯»º³åÖ¡
+
+        # åˆå§‹åŒ–ç¼“å†²å¸§
+
         g_state.buffer_frame1 = np.zeros((PREVIEW_HEIGHT, PREVIEW_WIDTH, 3), dtype=np.uint8)
+
         g_state.buffer_frame2 = np.zeros((PREVIEW_HEIGHT, PREVIEW_WIDTH, 3), dtype=np.uint8)
+
         
+
     def reset_parameters(self):
-        """½«Ïà»ú²ÎÊı»Ö¸´µ½³õÊ¼×´Ì¬"""
+
+        """å°†ç›¸æœºå‚æ•°æ¢å¤åˆ°åˆå§‹çŠ¶æ€"""
+
         self._camera_settings = CameraSettings()
+
         if g_state.preview_running:
+
             self.stop_preview()
+
             self.start_preview(g_state.current_cam)
+
         return self._camera_settings
 
     def stop_preview_and_reset_display(self, ui_preview_label):
-        """Í£Ö¹Ïà»úÔ¤ÀÀ²¢ÖØÖÃUIÏÔÊ¾"""
+
+        """åœæ­¢ç›¸æœºé¢„è§ˆå¹¶é‡ç½®UIæ˜¾ç¤º"""
+
         self.stop_preview()
+
         ui_preview_label.setText("Please click the buttons below to start the camera mode")
-        # Çå¿ÕÖ¡»º´æ
+
+        # æ¸…ç©ºå¸§ç¼“å­˜
+
         with g_state.frame_lock:
+
             g_state.raw_frame = None
+
             g_state.display_frame = None
+
         g_state.frame_ready = False
-        # ¼ÇÂ¼ÈÕÖ¾
+
+        # è®°å½•æ—¥å¿—
+
         from log_manager import LogManager
+
         LogManager.append_log("Preview stopped, resources released.", "INFO")
+
     
+
     def start_preview(self, cam_id: int):
-        """Æô¶¯Ô¤ÀÀÏß³Ì"""
+
+        """å¯åŠ¨é¢„è§ˆçº¿ç¨‹"""
+
         self.stop_preview()
+
         g_state.current_cam = cam_id
+
         g_state.preview_running = True
+
         g_state.frame_ready = False
+
         g_state.has_click = False
+
         g_state.click_point = (-1, -1)
+
         
+
         self._preview_thread = threading.Thread(target=self._preview_thread_func, daemon=True)
+
         self._preview_thread.start()
+
         LogManager.append_log(f"Preview started for mode: {cam_id}","INFO")
 
     def stop_preview(self):
-        """Í£Ö¹Ô¤ÀÀÏß³Ì"""
+
+        """åœæ­¢é¢„è§ˆçº¿ç¨‹"""
+
         g_state.preview_running = False
+
         g_state.current_cam = 0
+
         
+
         if self._preview_thread and self._preview_thread.is_alive():
+
             self._preview_thread.join(timeout=2.0)
+
         
+
         self._preview_thread = None
+
         
-        # Çå¿ÕÖ¡»º´æ
+
+        # æ¸…ç©ºå¸§ç¼“å­˜
+
         with g_state.frame_lock:
+
             g_state.raw_frame = None
+
             g_state.display_frame = None
+
         g_state.frame_ready = False
+
         
-        # ÖØÖÃ²â¾à×´Ì¬
+
+        # é‡ç½®æµ‹è·çŠ¶æ€
+
         g_state.has_click = False
+
         g_state.click_point = (-1, -1)
+
         with g_state.distance_lock:
+
             g_state.distance = 0.0
+
         
+
         LogManager.append_log("Preview stopped, resources released.","INFO")
+
         
+
     def _preview_thread_func(self):
-        """Ô¤ÀÀÏß³Ìº¯Êı"""
+
+        """é¢„è§ˆçº¿ç¨‹å‡½æ•°"""
+
         if isinstance(CAMERA_DEV, str) and CAMERA_DEV.startswith("/dev/video"):
+
             cam_idx = int(CAMERA_DEV.replace("/dev/video", ""))
+
         else:
+
             cam_idx = int(CAMERA_DEV)
+
         cap = cv2.VideoCapture(cam_idx, cv2.CAP_V4L2)
+
         
+
         if not cap.isOpened():
+
             LogManager.append_log(f"Error: Failed to open camera index {cam_idx}","ERROR")
+
             return
+
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, STEREO_WIDTH)
+
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, STEREO_HEIGHT)
-        cap.set(cv2.CAP_PROP_FPS, 15)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        cap.set(cv2.CAP_PROP_FPS, 30)          #  å°è¯•30fps
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)     # æœ€å°ç¼“å†²ï¼Œé™ä½å»¶è¿Ÿ
+        # è®¾ç½® FOURCC ä¸º MJPG ä»¥è·å¾—æ›´é«˜å¸§ç‡
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         self._apply_camera_settings(cap)
-        
+
         frame_count = 0
-        stat_frame_count = 0
         last_stat_time = time.time()
-        
+        stat_frame_count = 0
+        target_frame_interval = 1.0 / 30.0  # â˜… ç›®æ ‡30fpså¸§é—´éš”
+        last_frame_time = time.time()
+
         while g_state.preview_running:
             ret, frame = cap.read()
             if not ret or frame is None:
                 time.sleep(0.001)
                 continue
-            
-            if g_state.frame_ready:
+
+            # å¸§ç‡æ§åˆ¶ï¼šè·³è¿‡å¤„ç†å¤ªå¿«çš„å¸§
+            now = time.time()
+            if now - last_frame_time < target_frame_interval * 0.6:
+                stat_frame_count += 1
+                frame_count += 1
                 continue
-            
+            last_frame_time = now
+
             cam_id = g_state.current_cam
-            
-            write_idx = g_state.write_buffer_index
-            target_buffer = g_state.buffer_frame1 if write_idx == 0 else g_state.buffer_frame2
-            
-            # ¸ù¾İÉãÏñÍ·Ä£Ê½Ñ¡ÔñÏÔÊ¾ÇøÓò
-            if cam_id == 1:  # ×óÉãÏñÍ·
+
+            # æ ¹æ®æ‘„åƒå¤´æ¨¡å¼é€‰æ‹©æ˜¾ç¤ºåŒºåŸŸ
+            if cam_id == 1:  # å·¦æ‘„åƒå¤´
                 frame_show = frame[:, :STEREO_WIDTH//2]
-            elif cam_id == 2:  # ÓÒÉãÏñÍ·
+            elif cam_id == 2:  # å³æ‘„åƒå¤´
                 frame_show = frame[:, STEREO_WIDTH//2:]
-            elif cam_id == 0:  # ²â¾àÄ£Ê½£¨ÏÔÊ¾×óÉãÏñÍ·£©
+            elif cam_id == 0:  # æµ‹è·æ¨¡å¼ï¼ˆæ˜¾ç¤ºå·¦æ‘„åƒå¤´ï¼‰
                 frame_show = frame[:, :STEREO_WIDTH//2]
             else:
                 continue
-            
-            frame_show = cv2.resize(frame_show, (PREVIEW_WIDTH, PREVIEW_HEIGHT), 
-                                   interpolation=cv2.INTER_LINEAR)
-            
-            # ²â¾àÄ£Ê½ÏÂ»æÖÆµã»÷µã
+
+            # ä½¿ç”¨ INTER_NEAREST åŠ é€Ÿç¼©æ”¾ï¼ˆæ¯” INTER_LINEAR å¿«çº¦2-3å€ï¼‰
+            frame_show = cv2.resize(frame_show, (PREVIEW_WIDTH, PREVIEW_HEIGHT),
+                                   interpolation=cv2.INTER_NEAREST)
+
+            # æµ‹è·æ¨¡å¼ä¸‹ç»˜åˆ¶ç‚¹å‡»ç‚¹
             if cam_id == 0:
                 click_pt = g_state.click_point
                 if g_state.has_click and click_pt[0] >= 0 and click_pt[1] >= 0:
                     cv2.circle(frame_show, (click_pt[0], click_pt[1]), 3, (0, 0, 255), -1)
-            
-            # ×ª»»ÎªRGB¸ñÊ½
+
+            # è½¬æ¢ä¸ºRGBæ ¼å¼ï¼ˆQImageéœ€è¦RGBé¡ºåºï¼‰
             frame_show = cv2.cvtColor(frame_show, cv2.COLOR_BGR2RGB)
+
+            # åŒç¼“å†²äº¤æ¢ï¼ˆå…ˆåˆ‡æ¢ç´¢å¼•å†æ ‡è®°å°±ç»ªï¼‰
+            write_idx = g_state.write_buffer_index
+            target_buffer = g_state.buffer_frame1 if write_idx == 0 else g_state.buffer_frame2
             target_buffer[:] = frame_show
-            
+
+            # ä¿å­˜åŸå§‹å¸§ç”¨äºæµ‹è·
             with g_state.frame_lock:
                 g_state.raw_frame = frame.copy()
-            
+
             g_state.write_buffer_index = 1 - write_idx
             g_state.frame_ready = True
-            
+
             frame_count += 1
             stat_frame_count += 1
-            
-            # ĞÔÄÜÍ³¼Æ
-            now = time.time()
+
+            # æ€§èƒ½ç»Ÿè®¡ï¼ˆæ¯5ç§’ï¼‰
             elapsed = now - last_stat_time
             if elapsed >= 5:
-                LogManager.append_log(f"[Performance] FPS: {stat_frame_count / elapsed:.1f}, Total frames: {frame_count}","INFO")
+                actual_fps = stat_frame_count / elapsed
+                LogManager.append_log(f"[Performance] FPS: {actual_fps:.1f}, Total frames: {frame_count}","INFO")
                 last_stat_time = now
                 stat_frame_count = 0
         cap.release()
+
         LogManager.append_log(f"Camera released. Total frames: {frame_count}","INFO")
+
         
+
     def take_stereo_capture(self) -> tuple[bool, str]:
+
         """
-        Ë«Ä¿ÅÄÕÕ
+
+        åŒç›®æ‹ç…§
+
         Returns: (success, status_message)
+
         """
+
         print("Starting stereo capture...")
+
         self.stop_preview()
+
     
+
         try:
+
             if isinstance(CAMERA_DEV, str) and CAMERA_DEV.startswith("/dev/video"):
+
                 cam_idx = int(CAMERA_DEV.replace("/dev/video", ""))
+
             else:
+
                 cam_idx = int(CAMERA_DEV)
+
             cap = cv2.VideoCapture(cam_idx, cv2.CAP_V4L2)
+
         
+
             if not cap.isOpened():
+
                 return False, f"Failed to open camera index {cam_idx} for capture"
+
         
+
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, STEREO_WIDTH)
+
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, STEREO_HEIGHT)
+
             self._apply_camera_settings(cap)
+
         
-            # Ìø¹ıÇ°15Ö¡µÈ´ıÎÈ¶¨
-            for _ in range(15):
+
+            # è·³è¿‡å‰30å¸§ç­‰å¾…è‡ªåŠ¨æ›å…‰ç¨³å®šï¼ˆçº¦1ç§’ï¼‰
+            for _ in range(30):
                 cap.read()
-                time.sleep(0.066)
-        
-            # ²¶»ñÖ¡
+                time.sleep(0.033)
+
+            # é¢å¤–ç­‰å¾…æ›å…‰å®Œå…¨ç¨³å®š
+            time.sleep(0.5)
+
+            # æ•è·å¸§
+
             ret, frame = cap.read()
+
             cap.release()
+
         
+
             if not ret or frame is None:
+
                 return False, "Capture failed: Empty frame"
+
          
-            # ²ğ·Ö×óÓÒÖ¡
+
+            # æ‹†åˆ†å·¦å³å¸§
+
             left_frame = frame[:, :STEREO_WIDTH//2].copy()
+
             right_frame = frame[:, STEREO_WIDTH//2:].copy()
+
          
-            # Ëõ·ÅÓÃÓÚÏÔÊ¾
+
+            # ç¼©æ”¾ç”¨äºæ˜¾ç¤º
+
             left_frame = cv2.resize(left_frame, (PREVIEW_WIDTH//2 - 4, PREVIEW_HEIGHT), 
+
                                     interpolation=cv2.INTER_LINEAR)
+
             right_frame = cv2.resize(right_frame, (PREVIEW_WIDTH//2 - 4, PREVIEW_HEIGHT), 
+
                                     interpolation=cv2.INTER_LINEAR)
+
         
-            # ±£´æÖ¡µ½ÎÄ¼ş
+
+            # ä¿å­˜å¸§åˆ°æ–‡ä»¶
+
             cv2.imwrite(CAPTURE_L_PATH, left_frame)
+
             cv2.imwrite(CAPTURE_R_PATH, right_frame)
+
             print(f"Capture success: Saved to {CAPTURE_L_PATH} / {CAPTURE_R_PATH}")
+
         
+
             return True, "Capture completed successfully"
+
     
+
         except Exception as e:
+
             return False, f"Capture failed: {str(e)}"
+
     
+
     def update_preview_frame(self):
-        """¸üĞÂÔ¤ÀÀ»­Ãæ"""
+
+        """æ›´æ–°é¢„è§ˆç”»é¢"""
+
         if g_state.preview_label is None:
+
             return
+
         if not g_state.frame_ready:
+
             return
+
         
-        # ¶ÁÈ¡ÏÔÊ¾»º³åÇø
+
+        # è¯»å–æ˜¾ç¤ºç¼“å†²åŒº
+
         write_idx = g_state.write_buffer_index
+
         read_idx = 1 - write_idx
+
         read_buffer = g_state.buffer_frame1 if read_idx == 0 else g_state.buffer_frame2
+
         
+
         if read_buffer is None:
+
             return
-        
-        # ×ª»»ÎªQImage
+
+        # å…ˆæ ‡è®°æœªå°±ç»ªï¼Œå…è®¸é‡‡é›†çº¿ç¨‹å†™å…¥å¦ä¸€ä¸ªç¼“å†²åŒº
+        g_state.frame_ready = False
+
+        # è½¬æ¢ä¸ºQImageï¼ˆæ•°æ®å·²åœ¨é‡‡é›†çº¿ç¨‹ä¸­è½¬ä¸ºRGBï¼‰
         h, w, ch = read_buffer.shape
         img = QImage(read_buffer.data, w, h, ch * w, QImage.Format.Format_RGB888)
-        
-        # ÉèÖÃµ½±êÇ©
+
+        # copy() æ˜¯å¿…éœ€çš„â€”â€”read_buffer å¯èƒ½åœ¨ä¸‹ä¸€æ¬¡é‡‡é›†æ—¶è¢«è¦†ç›–
         g_state.preview_label.setPixmap(QPixmap.fromImage(img.copy()))
-        g_state.frame_ready = False
+
         
+
     def save_camera_settings(self, brightness: int, contrast: int, saturation: int,
+
                             hue: int, gamma: int, sharpness: int, backlight: int,
+
                             exposure: int, auto_exposure: bool, white_balance: int,
+
                             auto_white_balance: bool):
-        """±£´æÉãÏñÍ·ÉèÖÃ"""
+
+        """ä¿å­˜æ‘„åƒå¤´è®¾ç½®"""
+
         self._camera_settings.brightness = brightness
+
         self._camera_settings.contrast = contrast
+
         self._camera_settings.saturation = saturation
+
         self._camera_settings.hue = hue
+
         self._camera_settings.gamma = gamma
+
         self._camera_settings.sharpness = sharpness
+
         self._camera_settings.backlight = backlight
+
         self._camera_settings.exposure = exposure
+
         self._camera_settings.auto_exposure = auto_exposure
+
         self._camera_settings.white_balance = white_balance
+
         self._camera_settings.auto_white_balance = auto_white_balance
+
         print("Camera settings saved")
+
         
+
     def get_camera_settings(self) -> CameraSettings:
-        """»ñÈ¡ÉãÏñÍ·ÉèÖÃ"""
+
+        """è·å–æ‘„åƒå¤´è®¾ç½®"""
+
         return self._camera_settings
+
         
+
     def _apply_camera_settings(self, cap: cv2.VideoCapture):
-        """Ó¦ÓÃÉãÏñÍ·ÉèÖÃ"""
+
+        """åº”ç”¨æ‘„åƒå¤´è®¾ç½®"""
+
         settings = self._camera_settings
+
         cap.set(cv2.CAP_PROP_BRIGHTNESS, settings.brightness)
+
         cap.set(cv2.CAP_PROP_CONTRAST, settings.contrast)
+
         cap.set(cv2.CAP_PROP_SATURATION, settings.saturation)
+
         cap.set(cv2.CAP_PROP_HUE, settings.hue)
+
         cap.set(cv2.CAP_PROP_GAMMA, settings.gamma)
+
         cap.set(cv2.CAP_PROP_SHARPNESS, settings.sharpness - 1)
+
         cap.set(cv2.CAP_PROP_BACKLIGHT, settings.backlight)
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25 if settings.auto_exposure else 0.75)
+
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3.0 if settings.auto_exposure else 1.0)
+
         cap.set(cv2.CAP_PROP_EXPOSURE, settings.exposure)
+
         cap.set(cv2.CAP_PROP_AUTO_WB, 1.0 if settings.auto_white_balance else 0.0)
+
         cap.set(cv2.CAP_PROP_WHITE_BALANCE_BLUE_U, settings.white_balance)
+
         cap.set(cv2.CAP_PROP_WHITE_BALANCE_RED_V, settings.white_balance)
+
         print("Camera settings applied")
+
         
+
 def mat_to_qimage(mat: np.ndarray) -> QImage:
-    """½«OpenCV Mat×ª»»ÎªQImage"""
+
+    """å°†OpenCV Matè½¬æ¢ä¸ºQImage"""
+
     if mat is None:
+
        return QImage()
+
     rgb_mat = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
+
     h, w, ch = rgb_mat.shape
+
     return QImage(rgb_mat.data, w, h, ch * w, QImage.Format.Format_RGB888).copy()
