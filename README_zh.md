@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本项目是一个基于Quectel pi H1单板电脑实现的双目摄像头测距应用，点击相机预览画面中的物体可以计算摄像头与物体在真实世界中的距离。
+本项目是一个基于Quectel pi H1单板电脑实现的双目摄像头测距应用，点击相机预览画面中的物体可以计算摄像头与物体之间的实际物理距离（目标深度距离）。
 
 ![测距结果显示](assets/test1.png)
 
@@ -12,8 +12,8 @@
    - 使用SGBM立体匹配算法
    - 支持标定参数优化测量精度
 - 支持左/右摄像头单独预览
-- 同时捕获左右摄像头的图像做对比
-- 支持摄像头参数调整优化匹配结果
+- 同步采集左右摄像头的图像做对比
+- 支持相机图像参数调节（Sensor/ISP 参数控制）优化匹配结果
    - 亮度、对比度、饱和度调节
    - 曝光时间/自动曝光
    - 白平衡/自动白平衡
@@ -32,7 +32,11 @@
 
 ### 依赖安装
 
+Debian 12/13 默认将系统 Python 环境标记为 externally-managed（PEP 668），直接 `pip install` 会被拦截，请使用虚拟环境安装依赖：
+
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -57,8 +61,8 @@ sudo apt-get install v4l-utils
 ```
 
 ├── requirements.txt             # Python依赖列表
-├── README.md                    # 项目说明文档
-├── README_en.md                 # 英文说明文档
+├── README.md                    # 英文说明文档
+├── README_zh.md                 # 中文说明文档
 │
 ├── src/                         # 测距应用源码目录
 |   ├── main.py                  # 主入口，启动测距应用 
@@ -109,7 +113,7 @@ sudo apt-get install v4l-utils
 ### 标定工具（推荐打印出来，手机展示也可以但是要避免反光）
 - **棋盘格标定板**: 9×6 内角点
 - **方格边长**: 约9mm（可用手机屏幕显示，具体长度根据实际情况调整）
-- **标定图像**: 需要至少10对不同角度的图像对
+- **标定图像**: 需要至少15对不同角度的图像对，建议20对以上
 
 ### 运行环境
 - **开发板/PC**: 支持USB摄像头
@@ -177,7 +181,7 @@ python3 tools/generate_calib_params.py
 5. 生成 `tools/stereo_calib_params.npz` 标定参数文件
 
 **输出信息：**
-- 左/右摄像头重投影误差（理想值 <1）
+- 左/右摄像头重投影误差（理想值 ≤ 0.5，优质 < 0.3）
 - 双目重投影误差
 - 基线距离（Baseline）
 - 内参矩阵和外参矩阵
@@ -197,6 +201,9 @@ python3 main.py
 | Right Camera Preview | 右摄像头单独预览 |
 | Take Left/Right Picture | 双目拍照（保存到/tmp/） |
 | Start Ranging Mode | 进入测距模式 |
+| Save Parameters | 保存当前相机图像参数（保存后重启相机生效） |
+| Reset Parameters | 将相机图像参数恢复为初始值 |
+| Stop Camera | 停止采集并释放摄像头，重置预览区 |
 
 **测距操作：**
 1. 点击 **"Start Ranging Mode"** 进入测距模式
